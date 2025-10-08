@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ds
+spec:
+  selector:
+    matchLabels:
+      name: ds
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 100%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        name: ds
+    spec:
+      # schedulerName: dist-scheduler
+      tolerations:
+      - key: "kwok.x-k8s.io/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+      containers:
+        - name: busybox
+          image: busybox
+          command: ["sleep", "9999"]

@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: kwok-controller
+  name: kwok-controller
+  namespace: kube-system
+spec:
+  replicas: 10
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: kwok-controller
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: kwok-controller
+      annotations:
+        bump: "1"
+        fluentbit.io/exclude: "true"
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: pool-id
+                operator: In
+                values:
+                - "1"
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - kwok-controller
+              topologyKey: "kubernetes.io/hostname"
+      imagePullSecrets:
+      - name: pull-secret
+      containers:
+      - args:
+        - --manage-all-nodes=false
+        - --manage-nodes-with-label-selector=kwok-group=$(ORDINAL_NUMBER)
+        - --manage-single-node=
+        - --node-ip=$(POD_IP)
+        - --node-port=10247
+        - --cidr=10.0.0.1/24
+        - --node-lease-duration-seconds=40
+        - --enable-crds=Stage
+        - --enable-crds=Metric
+        - --enable-crds=Attach
+        - --enable-crds=ClusterAttach
+        - --enable-crds=Exec
+        - --enable-crds=ClusterExec
+        - --enable-crds=Logs
+        - --enable-crds=ClusterLogs
+        - --enable-crds=PortForward
+        - --enable-crds=ClusterPortForward
+        - --enable-crds=ResourceUsage
+        - --enable-crds=ClusterResourceUsage
+        - --v=4
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: GOMAXPROCS
+          value: "4"
+        - name: HOST_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.hostIP
+        - name: ORDINAL_NUMBER
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+        image: docker.io/bchess/kwok:v0.6.0-k8s1m-a6095a
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 10
+          httpGet:
+            path: /healthz
+            port: 10247
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 10
+        name: kwok-controller
+        readinessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /healthz
+            port: 10247
+            scheme: HTTP
+          initialDelaySeconds: 2
+          periodSeconds: 20
+          successThreshold: 1
+          timeoutSeconds: 2
+        resources:
+          requests:
+            cpu: "4"
+            memory: 6Gi
+        startupProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 10247
+            scheme: HTTP
+          initialDelaySeconds: 2
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: kwok-controller
+      serviceAccountName: kwok-controller
+      terminationGracePeriodSeconds: 30

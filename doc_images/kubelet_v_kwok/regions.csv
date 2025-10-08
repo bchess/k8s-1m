@@ -1,0 +1,9 @@
+name,x,y,width,height
+load1,18,406,980,336
+mem,1008,406,980,336
+etcd_reqs_s,18,2786,1950,329
+etcd_db,18,3107,982,267
+etcd_items,1007,3107,982,324
+apiserver_reqs_s,18,5994,1969,591
+apiserver_watch_events,1008,8539,980,413
+apiserver_watch,1008,8956,980,522

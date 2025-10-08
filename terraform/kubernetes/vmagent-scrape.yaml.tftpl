@@ -1,0 +1,184 @@
+global:
+  scrape_interval: 10s
+  scrape_timeout: 9s
+scrape_configs:
+- job_name: 'kube-system-http'
+  kubernetes_sd_configs:
+  - role: endpoints
+    namespaces:
+      names:
+      - kube-system
+  relabel_configs:
+  - source_labels: [__meta_kubernetes_endpoint_port_name]
+    action: keep
+    regex: metrics
+  - action: replace
+    target_label: __metrics_path__
+    regex: /metrics
+  - source_labels: [__meta_kubernetes_namespace]
+    action: replace
+    target_label: kubernetes_namespace
+  - source_labels: [__meta_kubernetes_endpoints_name]
+    action: replace
+    target_label: job
+  - source_labels: [__meta_kubernetes_endpoint_address_target_name]
+    action: replace
+    target_label: kubernetes_pod_name
+- job_name: 'kube-system-https'
+  tls_config:
+    insecure_skip_verify: true
+  kubernetes_sd_configs:
+  - role: endpoints
+    namespaces:
+      names:
+      - kube-system
+  relabel_configs:
+  - source_labels: [__meta_kubernetes_endpoint_port_name]
+    action: keep
+    regex: metrics-https
+  - action: replace
+    target_label: __scheme__
+    replacement: https
+  - action: replace
+    target_label: __metrics_path__
+    regex: /metrics
+  - source_labels: [__meta_kubernetes_endpoints_name]
+    action: replace
+    target_label: job
+  - source_labels: [__meta_kubernetes_namespace]
+    action: replace
+    target_label: kubernetes_namespace
+  - source_labels: [__meta_kubernetes_endpoint_address_target_name]
+    action: replace
+    target_label: kubernetes_pod_name
+- job_name: 'k3s-pod'
+  metrics_path: /metrics
+  scheme: https
+  authorization:
+    credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+  tls_config:
+    ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  kubernetes_sd_configs:
+  - role: endpoints
+    namespaces:
+      names:
+      - default
+      - kubelet
+  relabel_configs:
+  - source_labels: [__meta_kubernetes_endpoints_name]
+    action: keep
+    regex: kubelet
+  - action: replace
+    target_label: host
+    replacement: kubelets
+- job_name: 'k3s-pod-cadvisor'
+  metrics_path: /metrics/cadvisor
+  authorization:
+    credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+  scheme: https
+  tls_config:
+    ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  kubernetes_sd_configs:
+  - role: endpoints
+    namespaces:
+      names:
+      - default
+      - kubelet
+  relabel_configs:
+  - source_labels: [__meta_kubernetes_endpoints_name]
+    action: keep
+    regex: kubelet
+  - action: replace
+    target_label: host
+    replacement: kubelets
+  metric_relabel_configs:
+  - source_labels: [__name__]
+    action: keep
+    regex: (container_cpu.*|container_memory_rss|container_memory_working_set_bytes|container_memory_.+_usage_bytes)
+- job_name: 'kubelet-cadvisor'
+  metrics_path: /metrics/cadvisor
+  authorization:
+    credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+  scheme: https
+  tls_config:
+    ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  dns_sd_configs:
+  - names:
+    - 'kubelets-0.${domain}'
+    - 'kubelets-1.${domain}'
+    - 'kubelets-2.${domain}'
+    - 'kubelets-3.${domain}'
+    - 'kubelets-4.${domain}'
+    - 'kubelets-5.${domain}'
+    - 'kubelets-6.${domain}'
+    - 'kubelets-7.${domain}'
+    - 'kubelets-8.${domain}'
+    - 'kubelets-9.${domain}'
+    - 'apiserver.${domain}'
+    type: 'AAAA'
+    port: 10250
+  metric_relabel_configs:
+  - source_labels: [__name__]
+    action: keep
+    regex: (container_cpu.*|container_memory_rss|container_memory_working_set_bytes|container_memory_.+_usage_bytes)
+- job_name: 'kube-scheduler'
+  metrics_path: /metrics
+  authorization:
+    credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+  scheme: https
+  tls_config:
+    ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    insecure_skip_verify: true
+  dns_sd_configs:
+  - names:
+    - 'kube-scheduler.${domain}'
+    type: 'AAAA'
+    port: 10259
+  kubernetes_sd_configs:
+  - role: endpoints
+    namespaces:
+      names:
+      - default
+  relabel_configs:
+  - action: replace
+    target_label: __scheme__
+    replacement: https
+  - action: replace
+    target_label: __metrics_path__
+    regex: /metrics
+  - source_labels: [__address__]
+    target_label: __address__
+    regex: (.+):.+
+    action: replace
+    replacement: $1:10259
+  - source_labels: [__meta_kubernetes_endpoint_address_target_name]
+    action: replace
+    target_label: kubernetes_pod_name
+- job_name: 'kube-controller-manager'
+  metrics_path: /metrics
+  authorization:
+    credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+  scheme: https
+  tls_config:
+    ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    insecure_skip_verify: true
+  kubernetes_sd_configs:
+  - role: endpoints
+    namespaces:
+      names:
+      - default
+  relabel_configs:
+  - action: replace
+    target_label: __scheme__
+    replacement: https
+  - action: replace
+    target_label: __metrics_path__
+    regex: /metrics
+  - source_labels: [__address__]
+    target_label: __address__
+    regex: (.+):.+
+    action: replace
+    replacement: $1:10257
+  - source_labels: [__meta_kubernetes_endpoint_address_target_name]
+    action: replace
+    target_label: kubernetes_pod_name

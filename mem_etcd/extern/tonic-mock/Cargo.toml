@@ -1,0 +1,29 @@
+[package]
+authors = ["Tyr Chen <tyr.chen@gmail.com>"]
+categories = ["development-tools"]
+description = """
+Test utilities for easy mocking tonic streaming interface
+"""
+documentation = "https://docs.rs/tonic-mock"
+edition = "2018"
+homepage = "https://github.com/tyrchen/tonic-mock"
+keywords = ["tonic", "testing"]
+license = "MIT"
+name = "tonic-mock"
+readme = "README.md"
+repository = "https://github.com/tyrchen/tonic-mock"
+version = "0.3.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bytes = "1"
+futures = "0.3"
+http = "1"
+http-body = "1"
+prost = "0.13"
+tonic = "0.12"
+
+[dev-dependencies]
+async-stream = "0.3"
+tokio = {version = "1", features = ["rt-multi-thread"]}

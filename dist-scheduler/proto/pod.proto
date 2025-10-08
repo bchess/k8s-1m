@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 Benjamin Chess
+syntax = "proto3";
+
+package podservice;
+
+// Import the Kubernetes Pod definition.
+// (Adjust the path to match where the generated Kubernetes Pod proto is located)
+import "k8s.io/api/core/v1/generated.proto";
+
+option go_package = "pkg/podservice";
+
+message NewPodRequest {
+  fixed32 request_id = 1;
+  k8s.io.api.core.v1.Pod pod = 2;
+}
+message NewPodResponse {
+  fixed32 request_id = 1;
+}
+
+message ScheduleResponse {
+  bool permit = 1;
+}
+
+message SchedulingScore {
+  string podName = 1;
+  string namespace = 2;
+  string nodeName = 3;
+  int32 score = 4;
+}
+
+service PodService {
+  rpc NewPod(stream NewPodRequest) returns (stream NewPodResponse);
+  rpc CollectScore(SchedulingScore) returns (ScheduleResponse);
+}

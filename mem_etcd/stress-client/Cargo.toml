@@ -1,0 +1,28 @@
+[package]
+name = "stress_client"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+build = "build.rs"
+
+[dependencies]
+tokio = { version = "1.42", features = ["full"] }
+tokio-stream = { version = "0.1" }
+tonic = { version = "0.12.3", features = ["transport"] }
+prost = "0.13.4"
+prost-types = "0.13.4"
+parking_lot = "0.12.3"
+log = "0.4"
+env_logger = "0.10"
+bytes = "1"
+futures = "0.3"
+clap = { version = "4", features = ["derive"] }
+
+[build-dependencies]
+tonic-build = "0.12.3"
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = true
+debug = true

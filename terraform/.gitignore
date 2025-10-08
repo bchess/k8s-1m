@@ -1,0 +1,6 @@
+ca.crt
+kube_config.yaml
+plan.out
+.terraform/
+terraform.tfvars
+terraform.tfstate*

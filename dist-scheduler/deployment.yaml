@@ -1,0 +1,208 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dist-scheduler
+  namespace: kube-system
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: dist-scheduler
+  template:
+    metadata:
+      annotations:
+        bump: "4"
+      labels:
+        app: dist-scheduler
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: dist-scheduler
+            topologyKey: kubernetes.io/hostname
+      serviceAccountName: dist-scheduler
+      imagePullSecrets:
+      - name: pull-secret
+      containers:
+      - name: dist-scheduler
+        image: lax.vultrcr.com/k8s1m/dist-scheduler:latest
+        imagePullPolicy: Always
+        args:
+        - --grpc-addr=:50051
+        - --secure-port=8080
+        - --config=/etc/dist-scheduler/config.yaml
+        - --kube-api-qps=20000
+        - --kube-api-burst=40000
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - containerPort: 50051
+          name: scheduler-rpc
+          protocol: TCP
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        readinessProbe:
+          tcpSocket:
+            port: 50051
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: 50051
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        startupProbe:
+          tcpSocket:
+            port: 50051
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 10
+        volumeMounts:
+        - name: dist-scheduler-config
+          mountPath: /etc/dist-scheduler
+      volumes:
+      - name: dist-scheduler-config
+        configMap:
+          name: dist-scheduler-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dist-scheduler-config
+  namespace: kube-system
+data:
+  config.yaml: |
+    apiVersion: kubescheduler.config.k8s.io/v1
+    kind: KubeSchedulerConfiguration
+    clientConnection:
+      qps: 99999999
+    leaderElection:
+      leaderElect: false
+    parallelism: 16
+    profiles:
+    - schedulerName: dist-scheduler
+      percentageOfNodesToScore: 100
+      plugins:
+        postFilter:
+          disabled:
+          - name: DefaultPreemption
+        permit:
+          enabled:
+          - name: DistPermit
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dist-scheduler
+  namespace: kube-system
+spec:
+  ports:
+  - port: 50051
+    targetPort: scheduler-rpc
+  - port: 8080
+    targetPort: metrics
+  selector:
+    app: dist-scheduler
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dist-scheduler
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dist-scheduler-kube-scheduler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:kube-scheduler
+subjects:
+- kind: ServiceAccount
+  namespace: kube-system
+  name: dist-scheduler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dist-scheduler
+  namespace: kube-system
+rules:
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dist-scheduler
+  namespace: kube-system
+subjects:
+- kind: ServiceAccount
+  namespace: kube-system
+  name: dist-scheduler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dist-scheduler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dist-scheduler
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - patch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dist-scheduler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dist-scheduler
+subjects:
+- kind: ServiceAccount
+  namespace: kube-system
+  name: dist-scheduler

@@ -1,0 +1,4 @@
+BeautifulSoup4
+python-hcl2
+requests
+tabulate

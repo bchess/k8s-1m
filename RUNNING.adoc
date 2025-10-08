@@ -1,0 +1,339 @@
+:source-highlighter: rouge
+:toc:
+:toclevels: 5
+:toc-placement!:
+= Running k8s-1m
+
+toc::[]
+
+== Walkthrough
+
+The main components of k8s-1m are:
+
+* <<_mem_etcd>>: a custom etcd implementation that can be used to run a Kubernetes cluster
+* <<_dist_scheduler>>: a modification of the Kubernetes default-scheduler designed to shard across multiple replicas
+* <<_terraform>>: the configuration for deploying a Kubernetes cluster with these components across various cloud providers
+
+== mem_etcd
+
+`mem_etcd` is a custom implementation of the etcd API that can be used to run a Kubernetes cluster. By simplifying the interface and loosening some consistency guarantees, it can support a much higher IOPS and better latency than upstream etcd. Despite its name, it _can_ maintain durable state by writing to disk. It does not implement the full etcd API, but it is fully compatible with the subset that Kubernetes uses.
+
+
+=== Building and deploying mem_etcd ===
+
+`mem_etcd` is written in Rust and is available on https://github.com/k8s-1m/mem_etcd[GitHub].
+
+To build `mem_etcd`, you need to have Rust installed. You can install Rust by following the instructions on https://www.rust-lang.org/tools/install[the Rust website].
+
+Once you have Rust installed, you can build `mem_etcd` by running the following command:
+
+```
+cargo build --release
+```
+
+To run with the k8s-1m terraform, you then need to upload the binary to an public HTTP server that is accessible via IPv6. Both S3 and Cloudflare R2 support IPv6.
+
+I have only built and tested `mem_etcd` on amd64 platforms. It should work with ARM as well, but keep in mind you'll need to build the binary for the target architecture that you run in-cluster.
+
+=== mem_etcd arguments ===
+
+....
+Usage: mem_etcd [OPTIONS]
+
+Options:
+      --port <PORT>
+          gRPC listen port [env: ETCD_PORT=] [default: 2379]
+      --metrics-port <METRICS_PORT>
+          Metrics port [env: ETCD_METRICS_PORT=] [default: 9000]
+      --wal-dir <WAL_DIR>
+          WAL directory path [env: ETCD_WAL_DIR=] [default: ./wal]
+      --wal-default <WAL_DEFAULT>
+          Default WAL mode for prefixes without explicit override [default: buffered] [possible values: none, buffered, fsync]
+      --wal-no-write-prefix [<WAL_NO_WRITE_PREFIXES>...]
+
+  -h, --help
+          Print help
+  -V, --version
+          Print version
+....
+
+
+The WAL (Write-Ahead Log) is a mechanism that allows for durability of the etcd database to disk. It is a series of files that together record all changes to the database in order, so that if the mem_etcd exits or crashes, it can be recovered by replaying the log.
+
+The `--wal-dir` argument is specified as a directory. mem_etcd will create separate files for each prefix in this directory. The prefixes are encoded into the filenames as hex strings for filesystem compatibility.
+
+On boot, mem_etcd will scan the directory and replay all events that are present across the WAL files in revision order. Thus to start with a clean slate, you delete the directory before starting mem_etcd.
+
+=== WAL modes ===
+
+`--wal-default` can be one of the following values:
+
+* `none`: All changes are only kept in-memory. Fastest.
+* `buffered`: Default. Changes are written do disk asynchronously after the put operation completes. Minimally slower than `none`.
+* `fsync`: Changes are fsynced to disk before the put operation completes. Much slower than `buffered`.
+
+See the README doc for performance results of the different modes.
+
+=== Disabling WAL for specific key prefixes ===
+
+The `--wal-no-write-prefix` argument can be used to disable WAL for specific key prefixes. This can be useful to optimize write performance for specific resources that you do no need to be durable.
+
+The Kubernetes keyspace prefixing in etcd is of the following form:
+
+```
+/registry/[$APIGROUP/]$APIKIND/[$NAMESPACE/]
+```
+
+So to e.g. disable WAL for all Lease objects, you would use
+```
+--wal-no-write-prefix=/registry/coordination.k8s.io/leases
+```
+
+Or to just disable WAL for all Lease objects in the `kube-node-lease` namespace, you would use
+
+```
+--wal-no-write-prefix=/registry/coordination.k8s.io/leases/kube-node-lease
+```
+
+To disable WAL for all Events objects, you would use
+
+```
+--wal-no-write-prefix=/registry/events.k8s.io/events
+```
+
+Multiple prefixes can be specified by passing the argument multiple times.
+
+=== Caveats ===
+mem_etcd is pretty stable and fast. By its nature it's not guaranteed to be as durable as upstream etcd. It could be usable in certain production environments where you can afford to lose data in the event of a mem_etcd crash. See the README for a deeper discussion of the tradeoffs.
+
+* mem_etcd does not implement the full etcd API. It is only compatible with the subset that Kubernetes uses.
+* mem_etcd does not correctly implement the etcd lease API.  etcd objects with lease TTLs will live on forever.
+* mem_etcd does not use TLS. (This would not be hard to add)
+
+== dist-scheduler
+
+`dist-scheduler` acts as a sort of harness of the Kubernetes default-scheduler, designed to shard across multiple replicas. It is written in Go and is available on https://github.com/k8s-1m/dist-scheduler[GitHub].
+
+=== Building and deploying dist-scheduler ===
+
+To build `dist-scheduler`, you need to have Go installed. You can install Go by following the instructions on https://go.dev/doc/install[the Go website].
+
+Be sure you have fetched git submodules by running `git submodule update --init`.
+
+You can build `dist-scheduler` as a local binary by running `make` in the `dist-scheduler` directory.
+
+To use in the k8s-1m terraform, `dist-scheduler` must be packaged into a Docker image and pushed into a registry that supports IPv6. Docker Hub and Google Cloud Artifact Registry both support IPv6.
+
+`make docker` will build the image and push it to the registry. However the default registry in the Makefile is hard-coded to my own personal registry, so you'll need to change that. Be sure to update the Docker registry in terraform accordingly.  The build script is designed to build a cross-platform image that works with both amd64 and arm64.
+
+=== dist-scheduler configuration ===
+
+It's essential that you provide a custom `KubeSchedulerConfiguration` that includes the `DistPermit` plugin.
+
+The k8s-1m terraform will set this config for you, but in case you want to run it manually, here is the config:
+
+[source,yaml,subs="+quotes"]
+```
+apiVersion: kubescheduler.config.k8s.io/v1
+kind: KubeSchedulerConfiguration
+clientConnection:
+qps: 99999999
+burst: 99999999
+leaderElection:
+leaderElect: false
+parallelism: *<SCHEDULER_PARALLELISM>*
+profiles:
+- schedulerName: dist-scheduler
+percentageOfNodesToScore: 5
+plugins:
+    postFilter:
+    disabled:
+    - name: DefaultPreemption
+    permit:
+    enabled:
+    - name: DistPermit
+```
+Pass this file to dist-scheduler via the `--config` argument.
+
+* *SCHEDULER_PARALLELISM* is the number of separate goroutines that will be used to filter nodes and calculate scores per dist-scheduler process.  It's reasonable to set this to 1x or 2x of CPU cores that you are giving each scheduler process. (2x will give you more pod-scheduling throughput at the expense of more latency and more RAM usage)
+
+Many of the arguments are the same as the default-scheduler, but there are a few additional arguments that are specific to dist-scheduler:
+
+....
+Dist Scheduler flags:
+
+      --grpc-addr string
+                gRPC server address (default ":50051")
+      --leader-eligible
+                Whether this scheduler should run for leader election (default true)
+      --node-selector string
+                Scheduler only tracks nodes with this label selector. (Only applies for leader)
+      --num-concurrent-schedulers int
+                number of concurrent schedulers (default 8)
+      --permit-always-deny
+                Have Permit deny all pods. For testing only
+      --relay-only
+                Only relay pods, do not schedule ourselves
+      --wait-for-subschedulers float
+                wait for sub-schedulers to finish before proceeding (default 1)
+      --watch-pods
+                Leader watches for unscheduled pods (otherwise just use admission hook)
+....
+
+=== Leaders, sub-schedulers, and relays
+dist-scheduler is designed to self-assemble into a tree structure, electing a leader and sorting out nodes into each of its sub-schedulers equally.
+
+If you are not super performance sensitive, you can simply deploy a set of dist-schedulers and they will work just fine.  A scheduler replica can handle as many nodes as it has memory available, but a good rule of thumb is to have 1 scheduler replica per 1000-5000 nodes for optimal performance. Estimate about 100KB of memory needed per node under management.
+
+dist-scheduler does require a Kubernetes `Service` called `dist-scheduler` so that it can find its replicas. Terraform will create this for you.
+
+For clusters larger than 50,000 nodes, you may want to have a separate Deployment of just relays. These are dist-scheduler instances that will not actually act as pod schedulers, but instead merely act as relays to efficiently "scatter" pod requests to a bunch of sub-schedulers. These can be configured by setting the `--relay-only` CLI flag.
+
+Terraform will automatically create a separate Deployment of relays, sized based on how many overall replicas you are setting in the `dist_scheduler.replicas` terraform variable.
+
+=== Caveats ===
+
+dist-scheduler is definitely not suitable for production use:
+
+* dist-scheduler does not support evicting pods.
+* dist-scheduler does not correctly re-evaluate pods that fail to schedule on their first attempt
+* The code is messy and not well-tested
+
+== terraform
+The k8s-1m `terraform` directory is designed to deploy a functional Kubernetes cluster that uses `mem_etcd` and includes `dist-scheduler`
+
+IMPORTANT: *YOU WILL ABSOLUTELY NEED TO MAKE CHANGES BEFORE YOU CAN SUCCESSFULLY TERRAFORM APPLY. READ THIS SECTION CAREFULLY.*
+
+It will likely not be easy for you to get this terraform to a running state. It is highly opinionated with multiple specific dependencies that will seem odd. It is not really designed to be used by others in a stable way, but more as a reference for how you could structure your own cluster deployment.
+
+It is designed to support creating VMs with a few different possible cloud providers. It can even create multi-cloud clusters, with nodes across multiple providers.  Only the compute and network resources are cross-provider. Other resources may require you to have a specific provider.
+
+The supported cloud providers for VMs and VPCs are:
+
+* AWS
+* GCP
+* Vultr
+
+Others could be added. Each provider must support IPv6, and be able to assign a prefix of IPv6 addresses to one VM. (See `cloud_infra.tf`, `modules/*-vpc`, and `modules/vm`)
+
+Terraform uses the k3s distribution of Kubernetes to help simplify the cluster bootstrapping process, though many components and features of k3s are disabled.
+
+This terraform does not use Terraform Cloud. It keeps state locally. (You could change this easily)
+
+=== Prerequisites for terraform
+
+* A functional AWS Route53 zone for a public domain name
+* AWS API key to create Route53 records inside that zone
+* Vultr API key for the creation of the IPv6->IPv4 Wireguard Gateway (Vultr is chosen for its generous network egress free tier)
+* An HTTP server that is publicly accessible via IPv6 that you can upload things to. S3 and Cloudflare R2 both support IPv6.
+* A Docker registry that supports IPv6. Docker Hub and Google Cloud Artifact Registry both support IPv6.
+* A github username (no creds required) from which Terraform will pull ssh keys to access the VMs (https://github.com/$USERNAME.keys)
+* GCP API keys, if creating GCP VMs
+
+=== Hard-coded things you'll need to change
+
+There are references to docker images throughout terraform. Some of these are hard-coded to my own personal registry, and others are hard-coded to docker.io. You'll need to change these to point to your own registry.
+
+=== Docker registry ===
+Docker.io is extremely rate-limited, especially with Free plans. Even on a Pro plans, a large Kube cluster can easily overwhelm the QPS limits of docker.io. I had good experience using Google Cloud Artifact Registry to hold both my own private images, plus as a https://cloud.google.com/artifact-registry/docs/docker/configure-remote-auth-docker-hub[pull-through cache for other images natively serviced from Docker Hub].
+
+Put a `pull-secret.json` file in the `terraform/kubernetes` directory that contains your Docker registry credentials. This gets published as a Secret in various namespaces in the cluster and then referenced as the `imagePullSecret` for pods.
+
+=== HTTP server ===
+You'll see hard-coded references to https://r2.bchess.net. This is my own personal public R2 bucket that I use to host mem_etcd, k3s, and CNI plugins. Remember github does not support IPv6, so ideally anything that you'd try to pull from Github should instead be mirrored somewhere else. (The Wireguard gateway can and does provide IPv4 access, but at large scale it does become a bottleneck.) Having my own server also helps alleviate rate-limiting from 3rd party services.
+
+Please use your own server instead of mine. :) You shouldn't trust my random binaries and scripts.
+
+=== Making a cluster
+Fill out a `terraform.tfvars` file in the `terraform` directory that contains your sensitive keys and constants:
+
+```
+vultr_api_key  = "XXXXX"
+aws_access_key = "XXXXX"
+aws_secret_key = "XXXXX"
+github_user    = "XXXXX"
+
+google_credentials = "path-to-gcloud.json"
+google_project     = "XXXXX"
+
+domain = "example.k8s1m.org"
+ipv4_gateway_vultr_region = "lax"
+```
+When we call `terraform plan`, we'll also specific a separate `tfvars` file that contains the more dynamic variables about size of cluster, shape of VMs, etc. Terraform will merge the `terraform.tfvars` file with the `tfvars` file that we specify on the command line.
+
+Run `terraform init` to download the necessary providers.
+Run `terraform plan -var-file=$VARFILE -out plan.out` to see what will be created.
+Run `terraform apply plan.out` to then create the cluster
+
+There are many example `tfvars` files in the `terraform/tfvars` directory.  I'm not going to document them here but the filenames are a good hint. Create your own `tfvars` file that modifies the examples to your liking.
+
+=== Accessing the cluster ===
+If you can get terraform to run successfully, wow, well done! You now have a `kubelet_config.yaml` file in the `terraform` directory. You can use this file with kubectl to interact with the cluster.
+
+```
+% kubectl --kubeconfig=PATH_TO_TERRAFORM_DIR/kubelet_config.yaml get nodes
+```
+
+=== Creating kwok nodes
+
+Once you have a cluster running, you can use kwok to simulate a large number of nodes.
+First, install kwok:
+
+[source,bash]
+```
+% cd k8s-1m/kwok
+% ./install.sh
+```
+This deploys a StatefulSet of kwok controllers. Each kwok-controller is configured to manage nodes based on a certain node selector `kwok-group=<X>`, where X is the ordinal index number within the StatefulSet.
+
+Then use the `make_nodes` tool to create a large number of nodes. `make_nodes` is a custom go app that creates a large number of nodes in a single command.
+
+[source,bash]
+```
+% cd k8s-1m/kwok/make_nodes
+% # run `go build` if you haven't already
+% ./create-nodes -count 100000 -kubeconfig PATH_TO_TERRAFORM_DIR/kubelet_config.yaml
+```
+
+`make_nodes` creates nodes with a `kwok-group` label assigned. It has a CLI option called `-perKwokGroup` that defaults to 10000. This means that each kwok-controller will manage 10000 nodes.
+
+=== Creating kubelet-as-pods
+
+Terraform will optionally create a Deployment of kubelets. These are docker images that contain k3s and can be used to run `k3s agent`, which is fundamentally a kubelet (plus containerd and kube-proxy)
+
+To do this, set the `kubelet_pod_replicas` Terraform variable to some value greater than 0. See the `gcp-kbuelet-pod.tfvars` file as an example.
+
+=== Deploying dist-scheduler
+dist-scheduler can be deployed by setting the `dist_scheduler` terraform variable. See tfvars files for examples. dist-scheduler can run alongside the default scheduler just fine because it will only schedule pods that have `schedulerName: dist-scheduler` set in the PodSpec.
+
+=== Observability: metrics, logs, profiling, etc
+Terraform will deploy an "observability" VM that runs https://victoriametrics.com/[VictoriaMetrics], https://victoriametrics.com/products/victorialogs/[VictoriaLogs], and https://www.parca.dev/[Parca]. This runs outside of the cluster by design so that it isn't affected by any cluster problems.
+
+Each of these services become accessible via separate URLs on your observability VM:
+
+* victoriametrics: https://metrics.obs.$DOMAIN
+* victorialogs: https://logs.obs.$DOMAIN
+* parca: https://parca.obs.$DOMAIN
+
+where `$DOMAIN` is the `domain` you specified in your `tfvars` file.
+
+The username is `u` and the password is randomly generated by Terraform and will shown in the terraform workspace outputs. The TLS cert is self-signed.
+
+VictoriaMetrics is configured to scrape some metrics directly from kube-apiserver, kubelet, and mem_etcd using a randomly generated Basic Auth password.
+
+There is additionally a `vmagent` that runs inside the cluster to scrape some additional metrics and push them into victoriametrics. These are for pods like coredns, dist-scheduler, etc.
+
+There is a `fluent-bit` logs DaemonSet that will push systemd and pod logs into victorialogs.
+
+https://www.parca.dev/[Parca] is a profiler that can be used to profile the cluster. Pyroscope is similar, may be better, but it didn't support IPv6 at the time I started this project. There is a `parca-agent` that runs as a DaemonSet, doing some ebpf shenanigans and pushing traces to Parca.
+
+Note that Grafana is _not_ included on the observability VM, is _not_ provided by Terraform.  You will need to either use Grafana Cloud or deploy your own Grafana instance. There is a very comprehensive Grafana dashboard included in this project under the `grafana-dashboard` directory. In Grafana create datasources for victoriametrics, victorialogs that use the same Basic Auth credentials described above.
+
+VictoriaMetrics is awesome.
+
+=== ipv6->ipv4 gateway ===
+I admit I may have over-engineered this. It's a Wireguard gateway that runs on a Vultr VM. It's configured to SNAT all incoming IPv6 traffic through its own IPv4 address. It's meant to handle the "long tail" of random possible IPv4-only hosts that anything in the cluster may need to access. As a single VM, it's a bottleneck and not great at handling large amounts of traffic. It is used as a SNAT, only for outbound traffic.
+
+Clients authenticate themselves to a custom Python script HTTP service running on the gateway using an HTTP Basic Auth shared secret, randomly generated by Terraform. The service returns a wireguard config that the client then uses to connect to the gateway.
+
+A likely better solution would be to use whatever built-in IPv4 gateway is available on your cloud provider.

@@ -1,0 +1,8 @@
+The terraform in k8s-1m does deploy victoraimetrics (see RUNNING), but does not
+deploy an instance of Grafana. You will need to deploy one outside of this
+project, or use Grafana Cloud.
+
+Included in this directory is an extensive dashboard useful for monitoring the
+Kubernetes control plane, mem_etcd, dist-scheduler, and nodes in general.
+
+This dashboard was used with Grafana v11.4.0, VictoriaMetrics v1.107.0, and VictoriaLogs v1.19.0.

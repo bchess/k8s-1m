@@ -1,0 +1,4 @@
+notes/
+*.code-workspace
+*.code-workspace/
+.vscode/

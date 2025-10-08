@@ -1,0 +1,3 @@
+[submodule "dist-scheduler/fork/kubernetes"]
+	path = dist-scheduler/fork/kubernetes
+	url = git@github.com:bchess/kubernetes.git
