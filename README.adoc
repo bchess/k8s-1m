@@ -867,7 +867,10 @@ Replacing etcd with a more scalable backend shifts the bottleneck to the *kube-a
 At scale, the *biggest aggregate limiter is Go’s garbage collector*. The kube-apiserver creates and discards vast numbers of small objects when parsing and decoding resources, and this churn drives GC pressure. Adding more kube-apiserver replicas doesn’t help, since all of them are subscribed to the same event streams.
 
 == How to run yourself
-See the https://github.com/bchess/k8s-1m/blob/main/RUNNING.adoc[RUNNING.adoc] file for instructions on how to run a cluster yourself.
+See the
+ifdef::backend-html5[link:RUNNING.html[RUNNING]]
+ifndef::backend-html5[https://github.com/bchess/k8s-1m/blob/main/RUNNING.adoc[RUNNING]]
+file for instructions on how to run a cluster yourself.
 
 == Additional reading
 
