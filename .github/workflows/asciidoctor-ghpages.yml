@@ -26,6 +26,12 @@ jobs:
     - name: Configure Pages
       id: pages
       uses: actions/configure-pages@v3
+    - name: Install node
+      uses: actions/setup-node@v5
+      with:
+        node-version: 22
+    - name: Install mermaid
+      run: npm install -g @mermaid-js/mermaid-cli
     - name: Install Ruby
       uses: ruby/setup-ruby@v1
       with:
@@ -35,9 +41,9 @@ jobs:
     - name: prep site directory
       run: mkdir -p _site && cp -r doc_images _site/
     - name: Generate README
-      run: bundle exec asciidoctor README.adoc -o _site/index.html
+      run: bundle exec asciidoctor -r asciidoctor-diagram -a mermaid-puppeteer-config=.doc/puppeteer.config.json README.adoc -o _site/index.html
     - name: Generate RUNNING
-      run: bundle exec asciidoctor RUNNING.adoc -o _site/RUNNING.html
+      run: bundle exec asciidoctor -r asciidoctor-diagram -a mermaid-puppeteer-config=.doc/puppeteer.config.json RUNNING.adoc -o _site/RUNNING.html
     - name: Upload Artifacts
       uses: actions/upload-pages-artifact@v3
     - name: Deploy to GitHub Pages
