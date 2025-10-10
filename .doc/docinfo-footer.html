@@ -1,0 +1,19 @@
+<nav class="topbar" role="navigation" aria-label="Top Navigation">
+  <a id="link-index" href="index.html">k8s-1m Overview</a>
+  <a id="link-running" href="RUNNING.html">How to run</a>
+</nav>
+<script>
+(function () {
+  try {
+    var path = (location.pathname || '').toLowerCase();
+    var indexLink = document.getElementById('link-index');
+    var runningLink = document.getElementById('link-running');
+    if (path.endsWith('/running.html')) {
+      runningLink && runningLink.setAttribute('aria-current', 'page');
+    } else {
+      indexLink && indexLink.setAttribute('aria-current', 'page');
+    }
+  } catch (e) { /* no-op */ }
+})();
+</script>
+
