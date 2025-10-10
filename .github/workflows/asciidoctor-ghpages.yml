@@ -1,0 +1,45 @@
+name: Publish to GitHub Pages
+on:
+  push:
+    branches: [main]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+jobs:
+  build:
+    env:
+      BUNDLE_GEMFILE: .doc/Gemfile
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Configure Pages
+      id: pages
+      uses: actions/configure-pages@v3
+    - name: Install Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.2'
+        bundler-cache: true
+        cache-version: 1
+    - name: prep site directory
+      run: mkdir -p _site && cp -r doc_images _site/
+    - name: Generate README
+      run: bundle exec asciidoctor README.adoc -o _site/index.html
+    - name: Generate RUNNING
+      run: bundle exec asciidoctor RUNNING.adoc -o _site/RUNNING.html
+    - name: Upload Artifacts
+      uses: actions/upload-pages-artifact@v3
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
