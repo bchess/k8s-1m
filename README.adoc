@@ -865,3 +865,12 @@ A standard etcd setup on modern hardware sustains roughly 50,000 modifications p
 Replacing etcd with a more scalable backend shifts the bottleneck to the *kube-apiserver’s watch cache*. Each resource Kind today is guarded by a single RWMutex over a B-tree. Replacing that with a hash map can likely support ~100,000 events/second, enough to support 1 million nodes on current hardware. To go beyond that, increase the Lease interval (e.g., >10s) to reduce modification rate.
 
 At scale, the *biggest aggregate limiter is Go’s garbage collector*. The kube-apiserver creates and discards vast numbers of small objects when parsing and decoding resources, and this churn drives GC pressure. Adding more kube-apiserver replicas doesn’t help, since all of them are subscribed to the same event streams.
+
+== How to run yourself
+See the https://github.com/bchess/k8s-1m/blob/main/RUNNING.adoc[RUNNING.adoc] file for instructions on how to run a cluster yourself.
+
+== Additional reading
+
+* https://aws.amazon.com/blogs/containers/under-the-hood-amazon-eks-ultra-scale-clusters/[Under the hood: Amazon EKS ultra scale clusters]
+* https://www.alibabacloud.com/blog/how-does-alibaba-ensure-the-performance-of-system-components-in-a-10000-node-kubernetes-cluster_595469[How does Alibaba ensure the performance of system components in a 10,000 node Kubernetes cluster]
+* https://openai.com/index/scaling-kubernetes-to-7500-nodes/[Scaling Kubernetes to 7500 Nodes] (OpenAI)
