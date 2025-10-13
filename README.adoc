@@ -6,6 +6,11 @@
 
 This is an effort to create a fully functional Kubernetes cluster with 1 million active nodes.
 
+ifdef::env-github[]
+:tip-caption: :bulb:
+TIP: A nicer formatted version of this doc is available at https://bchess.github.io/k8s-1m/
+endif::[]
+
 toc::[]
 
 == Why?

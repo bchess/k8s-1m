@@ -4,6 +4,11 @@
 :toc-placement!:
 = Running k8s-1m
 
+ifdef::env-github[]
+:tip-caption: :bulb:
+TIP: A nicer formatted version of this doc is available at https://bchess.github.io/k8s-1m/RUNNING.html
+endif::[]
+
 toc::[]
 
 The code is available on https://github.com/bchess/k8s-1m[GitHub] under an Apache 2.0 license. Questions and comments are welcome in the Discussions section, but do not expect this code to be actively maintained. I likely will _not_ be fixing bugs or adding features.
