@@ -131,8 +131,8 @@ kube-apiservers have seven common verbs for state:
 etcd has four:
 
 * `put`
-* `get`
-* `range`
+* `range` - includes `get` with a null `range_end`
+* `deleteRange`
 * `watch`
 
 kube-apiserver `create`, `update`, `patch`, and `delete` all result in an etcd `put` operation. (A `delete` is just a `put` with a null value). etcd doesn't support any partial updates of values, only putting the entire value. So all operations that involve modifying a resource result in a new etcd `put` of the entire resource contents.
@@ -200,7 +200,7 @@ In fact, even *full control plane data loss isn’t catastrophic in some environ
 
 If you're not mad yet, let me push you a little further: *you probably don't need etcd replicas at all*.
 
-In the 5 years I ran Kubernetes clusters at OpenAI, we never once had an unplanned outage on an etcd VM. etcd's resource needs are tiny. The database is limited to 8GB. CPU is no more than 2-4 cores. Most cloud providers can do live migration on VMs this small. With network-attached storage like EBS, recovery is straightforward: spin up a replacement VM, attach the volume, and resume operation with zero data loss.
+In the 5 years I ran Kubernetes clusters at OpenAI, we never once had an unplanned VM outage on an etcd VM. etcd's resource needs are tiny. The database is limited to 8GB. CPU is no more than 2-4 cores. Most cloud providers can do live migration on VMs this small. With network-attached storage like EBS, recovery is straightforward: spin up a replacement VM, attach the volume, and resume operation with zero data loss.
 
 If you had just 1 etcd instance and that went down, your Kubernetes cluster control plane would go down. Pods would still stay running. Nodes would still be reachable. It's possible that you could still serve traffic. If etcd used EBS, recovery would be the time to start a new VM and attach the volume, with no data loss.
 
