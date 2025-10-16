@@ -28,7 +28,7 @@ The main components of k8s-1m are:
 
 === Building and deploying mem_etcd ===
 
-`mem_etcd` is written in Rust and is available on https://github.com/k8s-1m/mem_etcd[GitHub].
+`mem_etcd` is written in Rust and is available on https://github.com/bchess/k8s-1m/tree/main/mem_etcd[GitHub].
 
 To build `mem_etcd`, you need to have Rust installed. You can install Rust by following the instructions on https://www.rust-lang.org/tools/install[the Rust website].
 
@@ -119,7 +119,7 @@ mem_etcd is pretty stable and fast. By its nature it's not guaranteed to be as d
 
 == dist-scheduler
 
-`dist-scheduler` acts as a sort of harness of the Kubernetes default-scheduler, designed to shard across multiple replicas. It is written in Go and is available on https://github.com/k8s-1m/dist-scheduler[GitHub].
+`dist-scheduler` acts as a sort of harness of the Kubernetes default-scheduler, designed to shard across multiple replicas. It is written in Go and is available on https://github.com/bchess/k8s-1m/tree/main/dist-scheduler[GitHub].
 
 === Building and deploying dist-scheduler ===
 
