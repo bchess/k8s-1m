@@ -144,7 +144,7 @@ kube-apiserver `watch` can, but often doesn't, result in an etcd `watch`. More o
 Kubelets interact with the kube-apiserver primarily through two resource types:
 
 * `Node` - the resource representing a server for running pods
-* `Lease` - a lightweight heartbeat object updated by `kubelet`` to signal liveness
+* `Lease` - a lightweight heartbeat object updated by `kubelet` to signal liveness
 
 The Lease is critical: if it isn't refreshed in time, the NodeController marks the node as `NotReady`. By default, each kubelet updates its `Lease` every 10 seconds. At a scale of 1 million nodes, that alone translates to 100K writes per second just to keep the nodes "alive."
 
