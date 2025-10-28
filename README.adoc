@@ -374,10 +374,10 @@ ____
 *resourceVersion unset: Get State and Start at Most Recent* +
 Start a watch at the most recent resource version, which must be consistent (*in detail: served from etcd via a quorum read*). To establish initial state, the watch begins with synthetic "Added" events of all resources instances that exist at the starting resource version. All following watch events are for all changes that occurred after the resource version the watch started at.
 
-*resourceVersion=`"0`": Get State and Start at Any* +
+*resourceVersion="0": Get State and Start at Any* +
 Start a watch at any resource version; the most recent resource version available is preferred, but not required.... To establish initial state, the watch begins with synthetic "Added" events for all resource instances that exist at the starting resource version. All following watch events are for all changes that occurred after the resource version the watch started at.
 
-*resourceVersion=`"{value other than 0}`": Start at Exact* +
+*resourceVersion="{value other than 0}": Start at Exact* +
 Start a watch at an exact resource version. The watch events are for all changes after the provided resource version. Unlike "Get State and Start at Most Recent" and "Get State and Start at Any", *the watch is not started with synthetic "Added" events* for the provided resource version.
 ____
 
@@ -639,7 +639,7 @@ On my hardware, a single scheduler was able to filter and score a pod against 1K
 
 In fact, we're going to need so many schedulers that a single relay simply doesn't have enough network bandwidth to send to all of them in enough time. *We need multiple relays*. In fact we actually need multiple levels of relays to reach all of the schedulers.
 
-Similarly the gathering stage, of collecting all scores and determining a winner, can also be distributed. Each scheduler and relay has a Score `Gather`` endpoint, and it's determined via a hash of the pod name to determine which scheduler is responsible for gathering the scores of a particular pod.
+Similarly the gathering stage, of collecting all scores and determining a winner, can also be distributed. Each scheduler and relay has a Score `Gather` endpoint, and it's determined via a hash of the pod name to determine which scheduler is responsible for gathering the scores of a particular pod.
 
 Here is a simplified example of what more relays looks like. This is with a fanout of 3, while in reality I used a fanout of 10. I was aiming to maximize but not exceed the maximum transmit throughput of each NIC to transmit 1M * 4K of Pod data in 60 seconds.
 
