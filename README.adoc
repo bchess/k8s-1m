@@ -173,7 +173,7 @@ Plus, etcd has a pretty broad interface surface area:
 
 Implementing all of those interfaces can make for complex software. Beyond simple puts and deletes, etcd must support transactions, maintain multi-versioned history, and enforce Raft-based consensus across replicas.
 
-These features are what give Kubernetes its consistency and reliability, but they also impose strict constraints on performance. Intuitively, strong consistency means more serialization: operations can’t always be parallelized freely. Writes often need to follow a carefully ordered path through Raft, the WAL, and compaction, ensuring that every replica agrees on state before acknowledging success.
+These features are what give Kubernetes its consistency and reliability, but they also constrain performance. Intuitively, strong consistency means more serialization: operations can’t always be parallelized freely. Writes often need to follow a carefully ordered path through Raft, the WAL, and compaction, ensuring that every replica agrees on state before acknowledging success.
 
 The result is raw hardware capable of millions of writes per second, but etcd delivering orders of magnitude less due to the interfaces and guarantees it must uphold.
 
