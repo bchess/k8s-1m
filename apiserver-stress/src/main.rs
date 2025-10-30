@@ -35,6 +35,8 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    rustls::crypto::ring::default_provider().install_default().expect("Failed to install rustls crypto provider");
+
     // Initialize metrics
     PrometheusBuilder::new()
         .with_http_listener(([0, 0, 0, 0], 9001))
